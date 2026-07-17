@@ -111,3 +111,10 @@ cmake --build $env:TEMP\ccxrbuild --config Release --target QXRAYPLANVIEW_PLUGIN
 ## Release Builds
 
 This plugin must be built separately for each CloudCompare target. See [BUILD_MATRIX.md](BUILD_MATRIX.md) for the stable and beta/dev build matrix.
+
+Beta/dev releases include:
+
+- a ZIP package with `QXRAYPLANVIEW_PLUGIN.dll` and install notes;
+- a Windows installer generated with Inno Setup.
+
+The installer asks for the CloudCompare folder, verifies `CloudCompare.exe`, backs up an existing plugin DLL, and copies the new DLL into `CloudCompare\plugins`.

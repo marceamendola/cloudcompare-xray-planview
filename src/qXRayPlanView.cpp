@@ -1,6 +1,5 @@
 #include "../include/qXRayPlanView.h"
 #include "../include/NormalsOverlayLayer.h"
-#include "../include/XRayDialog.h"
 #include "../include/XRayOverlayLayer.h"
 
 #include <QAction>
@@ -8,18 +7,11 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
-#include <QCoreApplication>
 #include <QDialog>
 #include <QDoubleSpinBox>
-#include <QEvent>
-#include <QFormLayout>
 #include <QHBoxLayout>
-#include <QKeyEvent>
 #include <QLabel>
 #include <QMainWindow>
-#include <QProgressDialog>
-#include <QPushButton>
-#include <QShortcut>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QTimer>
@@ -43,57 +35,9 @@
 
 namespace
 {
-	constexpr int MaxRasterSide = 1000;
-	constexpr double Percentile = 0.997;
-	constexpr unsigned ProgressUpdateStep = 100000;
 	constexpr const char* ZSliceScalarFieldName = "__XRay_Z_Live_Slice__";
 
 	constexpr double GridNormalsMinTriangleAngleDeg = 1.0;
-
-	class CloseSafeOverlayDialog : public ccOverlayDialog
-	{
-	public:
-		explicit CloseSafeOverlayDialog( QWidget* parent = nullptr )
-			: ccOverlayDialog( parent )
-		{
-			for ( QShortcut* shortcut : findChildren<QShortcut*>() )
-			{
-				shortcut->setEnabled( false );
-			}
-		}
-
-	protected:
-		void keyPressEvent( QKeyEvent* event ) override
-		{
-			if ( event && event->key() == Qt::Key_Escape )
-			{
-				event->accept();
-				return;
-			}
-
-			ccOverlayDialog::keyPressEvent( event );
-		}
-
-		bool eventFilter( QObject* obj, QEvent* event ) override
-		{
-			if ( event && event->type() == QEvent::KeyPress )
-			{
-				QKeyEvent* keyEvent = static_cast<QKeyEvent*>( event );
-				if ( keyEvent && keyEvent->key() == Qt::Key_Escape )
-				{
-					return true;
-				}
-			}
-
-			return ccOverlayDialog::eventFilter( obj, event );
-		}
-
-		void closeEvent( QCloseEvent* event ) override
-		{
-			stop( false );
-			event->accept();
-		}
-	};
 
 	class ZSliceToolDialog : public QWidget
 	{
@@ -198,7 +142,7 @@ namespace
 		constexpr int Margin = 12;
 		dialog->adjustSize();
 		const int y = std::max( Margin, target->height() - dialog->height() - Margin );
-		dialog->move( target->mapToGlobal( QPoint( Margin, y ) ) );
+		dialog->move( QPoint( Margin, y ) );
 	}
 }
 
@@ -270,22 +214,6 @@ QList<QAction*> qXRayPlanView::getActions()
 	}
 
 	return { m_xRayOverlayAction, m_xRayControlsAction, m_normalsOverlayAction, m_normalsControlsAction, m_zSliceAction, m_restoreAction };
-}
-
-ccPointCloud* qXRayPlanView::selectedCloud() const
-{
-	if ( !m_app )
-	{
-		return nullptr;
-	}
-
-	const ccHObject::Container& selectedEntities = m_app->getSelectedEntities();
-	if ( selectedEntities.size() != 1 || !selectedEntities.front()->isA( CC_TYPES::POINT_CLOUD ) )
-	{
-		return nullptr;
-	}
-
-	return static_cast<ccPointCloud*>( selectedEntities.front() );
 }
 
 std::vector<ccPointCloud*> qXRayPlanView::selectedClouds() const
@@ -1039,7 +967,6 @@ void qXRayPlanView::restoreOriginalColors()
 			m_xRayClouds.erase( cloudId );
 			m_xRayCloudWasVisible.erase( cloudId );
 			m_xRayCloudWasEnabled.erase( cloudId );
-			m_xRayCloudDisplays.erase( cloudId );
 			restoredSomething = true;
 		}
 
@@ -1064,7 +991,6 @@ void qXRayPlanView::restoreOriginalColors()
 			m_normalsClouds.erase( cloudId );
 			m_normalsCloudWasVisible.erase( cloudId );
 			m_normalsCloudWasEnabled.erase( cloudId );
-			m_normalsCloudDisplays.erase( cloudId );
 			restoredSomething = true;
 		}
 
@@ -1539,192 +1465,6 @@ bool qXRayPlanView::applyZVisibility( ccPointCloud* cloud, double zMin, double z
 	cloud->releaseVBOs();
 	cloud->prepareDisplayForRefresh();
 	setActiveViewportBackground( inverted );
-	return true;
-}
-
-bool qXRayPlanView::computeAndApplyXRayColors( ccPointCloud* cloud, const XRaySettings& settings )
-{
-	if ( !cloud || cloud->size() == 0 )
-	{
-		return false;
-	}
-
-	const unsigned pointCount = cloud->size();
-	QProgressDialog progressDlg( tr( "Computing X-Ray colors..." ), tr( "Cancel" ), 0, 100, m_app ? m_app->getMainWindow() : nullptr );
-	progressDlg.setWindowModality( Qt::ApplicationModal );
-	progressDlg.setMinimumDuration( 0 );
-	progressDlg.setValue( 0 );
-	progressDlg.show();
-
-	const auto updateProgress = [&]( int phase, unsigned index ) -> bool
-	{
-		if ( index % ProgressUpdateStep != 0 && index + 1 < pointCount )
-		{
-			return true;
-		}
-
-		const int phaseOffset = phase * 33;
-		const int phaseValue = static_cast<int>( 33.0 * static_cast<double>( index + 1 ) / static_cast<double>( std::max( 1u, pointCount ) ) );
-		progressDlg.setValue( std::min( 99, phaseOffset + phaseValue ) );
-		QCoreApplication::processEvents();
-		return !progressDlg.wasCanceled();
-	};
-
-	const unsigned cloudId = cloud->getUniqueID();
-	if ( m_backups.find( cloudId ) == m_backups.end() )
-	{
-		ColorBackup backup;
-		backup.hadColors = cloud->hasColors();
-		backup.colorsShown = cloud->colorsShown();
-		backup.sfShown = cloud->sfShown();
-		backup.displayedScalarFieldIndex = cloud->getCurrentDisplayedScalarFieldIndex();
-		if ( m_app && m_app->getActiveGLWindow() )
-		{
-			const ccGui::ParamStruct& displayParams = m_app->getActiveGLWindow()->getDisplayParameters();
-			backup.hadBackground = true;
-			backup.backgroundCol = displayParams.backgroundCol;
-			backup.drawBackgroundGradient = displayParams.drawBackgroundGradient;
-		}
-
-		if ( backup.hadColors )
-		{
-			backup.colorsBackedUp = true;
-			backup.colors.reserve( pointCount );
-			for ( unsigned i = 0; i < pointCount; ++i )
-			{
-				backup.colors.push_back( cloud->getPointColor( i ) );
-				if ( !updateProgress( 0, i ) )
-				{
-					return false;
-				}
-			}
-		}
-		else
-		{
-			progressDlg.setValue( 5 );
-			QCoreApplication::processEvents();
-		}
-
-		m_backups.emplace( cloudId, std::move( backup ) );
-	}
-
-	const CCVector3* p0 = cloud->getPointPersistentPtr( 0 );
-	double xMin = p0->x;
-	double xMax = p0->x;
-	double yMin = p0->y;
-	double yMax = p0->y;
-
-	for ( unsigned i = 1; i < pointCount; ++i )
-	{
-		const CCVector3* p = cloud->getPointPersistentPtr( i );
-		xMin = std::min<double>( xMin, p->x );
-		xMax = std::max<double>( xMax, p->x );
-		yMin = std::min<double>( yMin, p->y );
-		yMax = std::max<double>( yMax, p->y );
-		if ( !updateProgress( 0, i ) )
-		{
-			return false;
-		}
-	}
-
-	const double spanX = std::max( 1e-9, xMax - xMin );
-	const double spanY = std::max( 1e-9, yMax - yMin );
-
-	int w = MaxRasterSide;
-	int h = MaxRasterSide;
-	if ( spanX >= spanY )
-	{
-		h = std::max( 1, static_cast<int>( std::round( MaxRasterSide * spanY / spanX ) ) );
-	}
-	else
-	{
-		w = std::max( 1, static_cast<int>( std::round( MaxRasterSide * spanX / spanY ) ) );
-	}
-
-	std::vector<unsigned int> counts( static_cast<size_t>( w ) * static_cast<size_t>( h ), 0 );
-	const double pixelSizeX = spanX / static_cast<double>( w );
-	const double pixelSizeY = spanY / static_cast<double>( h );
-
-	for ( unsigned i = 0; i < pointCount; ++i )
-	{
-		const CCVector3* p = cloud->getPointPersistentPtr( i );
-		if ( p->z < settings.zMin || p->z > settings.zMax )
-		{
-			continue;
-		}
-
-		int ix = static_cast<int>( std::floor( ( p->x - xMin ) / pixelSizeX ) );
-		int iy = static_cast<int>( std::floor( ( yMax - p->y ) / pixelSizeY ) );
-		ix = std::clamp( ix, 0, w - 1 );
-		iy = std::clamp( iy, 0, h - 1 );
-		++counts[static_cast<size_t>( iy ) * static_cast<size_t>( w ) + static_cast<size_t>( ix )];
-		if ( !updateProgress( 1, i ) )
-		{
-			return false;
-		}
-	}
-
-	std::vector<unsigned int> nonZero;
-	nonZero.reserve( counts.size() / 8 );
-	for ( unsigned int count : counts )
-	{
-		if ( count > 0 )
-		{
-			nonZero.push_back( count );
-		}
-	}
-
-	if ( nonZero.empty() )
-	{
-		return false;
-	}
-
-	const size_t percentileIndex = static_cast<size_t>( std::floor( Percentile * static_cast<double>( nonZero.size() - 1 ) ) );
-	std::nth_element( nonZero.begin(), nonZero.begin() + percentileIndex, nonZero.end() );
-	const unsigned int limit = std::max( 1u, nonZero[percentileIndex] );
-	const double denom = std::log1p( static_cast<double>( limit ) );
-
-	if ( !cloud->resizeTheRGBTable( false ) )
-	{
-		return false;
-	}
-
-	for ( unsigned i = 0; i < pointCount; ++i )
-	{
-		const CCVector3* p = cloud->getPointPersistentPtr( i );
-		if ( p->z < settings.zMin || p->z > settings.zMax )
-		{
-			cloud->setPointColor( i, settings.invert ? ccColor::Rgb( 255, 255, 255 ) : ccColor::Rgb( 0, 0, 0 ) );
-			continue;
-		}
-
-		int ix = static_cast<int>( std::floor( ( p->x - xMin ) / pixelSizeX ) );
-		int iy = static_cast<int>( std::floor( ( yMax - p->y ) / pixelSizeY ) );
-		ix = std::clamp( ix, 0, w - 1 );
-		iy = std::clamp( iy, 0, h - 1 );
-
-		const unsigned int count = counts[static_cast<size_t>( iy ) * static_cast<size_t>( w ) + static_cast<size_t>( ix )];
-		double t = std::log1p( static_cast<double>( count ) ) / denom;
-		t = std::pow( std::clamp( t, 0.0, 1.0 ), settings.gamma );
-		if ( settings.invert )
-		{
-			t = 1.0 - t;
-		}
-		const unsigned char value = static_cast<unsigned char>( std::round( 255.0 * ( 1.0 - t ) ) );
-		cloud->setPointColor( i, ccColor::Rgb( value, value, value ) );
-		if ( !updateProgress( 2, i ) )
-		{
-			return false;
-		}
-	}
-
-	cloud->showColors( true );
-	cloud->showSF( false );
-	cloud->colorsHaveChanged();
-	cloud->prepareDisplayForRefresh();
-	setActiveViewportBackground( settings.invert );
-	progressDlg.setValue( 100 );
-
 	return true;
 }
 
