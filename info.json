@@ -1,0 +1,16 @@
+{
+	"type": "Standard",
+	"name": "X-Ray Plan View",
+	"description": "Interactive top-view point cloud density renderer with Z range filtering.",
+	"authors": [
+		{
+			"name": "Planaris / Codex"
+		}
+	],
+	"maintainers": [
+		{
+			"name": "Planaris"
+		}
+	]
+}
+

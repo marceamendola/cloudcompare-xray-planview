@@ -1,0 +1,15 @@
+build/
+out/
+*.user
+*.suo
+*.vcxproj*
+*.dll
+*.lib
+*.exp
+*.obj
+*.pdb
+*.ilk
+*.log
+*.tmp
+*.pending
+desktop.ini
