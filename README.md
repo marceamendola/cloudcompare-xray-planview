@@ -108,3 +108,6 @@ Last validated locally with:
 cmake --build $env:TEMP\ccxrbuild --config Release --target QXRAYPLANVIEW_PLUGIN
 ```
 
+## Release Builds
+
+This plugin must be built separately for each CloudCompare target. See [BUILD_MATRIX.md](BUILD_MATRIX.md) for the stable and beta/dev build matrix.
