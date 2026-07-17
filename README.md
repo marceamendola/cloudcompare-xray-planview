@@ -53,6 +53,26 @@ Height spectral mode:
 
 ![X-Ray height spectral mode](docs/assets/xray-04-spectral-controls.png)
 
+## Normals Gallery
+
+Soft RGB normals on a dark background:
+
+![Soft RGB normals on dark background](docs/assets/normals-01-rgb.png)
+
+RGB normals on a light background:
+
+![RGB normals on light background](docs/assets/normals-02-controls.png)
+
+View-filtered normals:
+
+![View-filtered normals](docs/assets/normals-03-filtered.png)
+
+## Z Slice Demo
+
+Live Z Slice filtering from the viewport panel:
+
+[Watch the Z Slice demo video](docs/assets/zslice-demo.mp4)
+
 ## CloudCompare Integration
 
 Copy this folder into:
