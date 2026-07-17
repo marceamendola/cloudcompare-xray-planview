@@ -31,6 +31,28 @@ CloudCompare standard plugin for point-cloud visualization workflows focused on 
   - Restores the viewport background to white.
   - Forces affected clouds back to visible and enabled.
 
+## X-Ray Gallery
+
+Original RGB point cloud:
+
+![Original RGB point cloud](docs/assets/xray-00-original.png)
+
+X-Ray overlay on a light background:
+
+![X-Ray overlay on light background](docs/assets/xray-01-overlay.png)
+
+X-Ray overlay on a dark background:
+
+![X-Ray overlay on dark background](docs/assets/xray-02-controls.png)
+
+Monochrome controls:
+
+![X-Ray monochrome controls](docs/assets/xray-03-monochrome-controls.png)
+
+Height spectral mode:
+
+![X-Ray height spectral mode](docs/assets/xray-04-spectral-controls.png)
+
 ## CloudCompare Integration
 
 Copy this folder into:
