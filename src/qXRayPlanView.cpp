@@ -952,12 +952,12 @@ void qXRayPlanView::restoreOriginalColors()
 			const auto wasVisibleIt = m_xRayCloudWasVisible.find( cloudId );
 			if ( wasVisibleIt != m_xRayCloudWasVisible.end() )
 			{
-				cloud->setVisible( true );
+				cloud->setVisible( wasVisibleIt->second );
 			}
 			const auto wasEnabledIt = m_xRayCloudWasEnabled.find( cloudId );
 			if ( wasEnabledIt != m_xRayCloudWasEnabled.end() )
 			{
-				cloud->setEnabled( true );
+				cloud->setEnabled( wasEnabledIt->second );
 			}
 			if ( m_app )
 			{
@@ -976,12 +976,12 @@ void qXRayPlanView::restoreOriginalColors()
 			const auto wasVisibleIt = m_normalsCloudWasVisible.find( cloudId );
 			if ( wasVisibleIt != m_normalsCloudWasVisible.end() )
 			{
-				cloud->setVisible( true );
+				cloud->setVisible( wasVisibleIt->second );
 			}
 			const auto wasEnabledIt = m_normalsCloudWasEnabled.find( cloudId );
 			if ( wasEnabledIt != m_normalsCloudWasEnabled.end() )
 			{
-				cloud->setEnabled( true );
+				cloud->setEnabled( wasEnabledIt->second );
 			}
 			if ( m_app )
 			{
@@ -1003,8 +1003,6 @@ void qXRayPlanView::restoreOriginalColors()
 			cloud->unallocateVisibilityArray();
 		}
 
-		cloud->setVisible( true );
-		cloud->setEnabled( true );
 		cloud->prepareDisplayForRefresh();
 	}
 
@@ -1431,6 +1429,11 @@ bool qXRayPlanView::applyZVisibility( ccPointCloud* cloud, double zMin, double z
 		backup.displayedScalarFieldIndex = cloud->getCurrentDisplayedScalarFieldIndex();
 		backup.currentInScalarFieldIndex = cloud->getCurrentInScalarFieldIndex();
 		backup.currentOutScalarFieldIndex = cloud->getCurrentOutScalarFieldIndex();
+		backup.hadVisibility = cloud->isVisibilityTableInstantiated();
+		if ( backup.hadVisibility )
+		{
+			backup.visibility = cloud->getTheVisibilityArray();
+		}
 		if ( m_app && m_app->getActiveGLWindow() )
 		{
 			const ccGui::ParamStruct& displayParams = m_app->getActiveGLWindow()->getDisplayParameters();
@@ -1456,7 +1459,9 @@ bool qXRayPlanView::applyZVisibility( ccPointCloud* cloud, double zMin, double z
 	for ( unsigned i = 0; i < pointCount; ++i )
 	{
 		const CCVector3* p = cloud->getPointPersistentPtr( i );
-		if ( p->z < currentZMin || p->z > currentZMax )
+		const bool wasVisible = !backup.hadVisibility
+			|| ( i < backup.visibility.size() && backup.visibility[i] == CCCoreLib::POINT_VISIBLE );
+		if ( !wasVisible || p->z < currentZMin || p->z > currentZMax )
 		{
 			visibility[i] = CCCoreLib::POINT_HIDDEN;
 		}
@@ -1481,8 +1486,7 @@ bool qXRayPlanView::restoreBackup( ccPointCloud* cloud )
 		return false;
 	}
 
-	const ColorBackup backup = std::move( it->second );
-	m_backups.erase( it );
+	const ColorBackup& backup = it->second;
 
 	if ( backup.colorsBackedUp )
 	{
@@ -1504,7 +1508,18 @@ bool qXRayPlanView::restoreBackup( ccPointCloud* cloud )
 
 	cloud->showColors( backup.colorsShown );
 	cloud->showSF( backup.sfShown );
-	cloud->unallocateVisibilityArray();
+	if ( backup.hadVisibility && backup.visibility.size() == cloud->size() )
+	{
+		if ( !cloud->resetVisibilityArray() )
+		{
+			return false;
+		}
+		cloud->getTheVisibilityArray() = backup.visibility;
+	}
+	else
+	{
+		cloud->unallocateVisibilityArray();
+	}
 	cloud->setCurrentDisplayedScalarField( backup.displayedScalarFieldIndex );
 	cloud->setCurrentInScalarField( backup.currentInScalarFieldIndex );
 	cloud->setCurrentOutScalarField( backup.currentOutScalarFieldIndex );
@@ -1522,6 +1537,7 @@ bool qXRayPlanView::restoreBackup( ccPointCloud* cloud )
 		m_app->getActiveGLWindow()->setDisplayParameters( displayParams, true );
 	}
 
+	m_backups.erase( it );
 	return true;
 }
 
