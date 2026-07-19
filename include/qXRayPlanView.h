@@ -52,6 +52,8 @@ private:
 		int currentOutScalarFieldIndex = -1;
 		int zScalarFieldIndex = -1;
 		bool createdZScalarField = false;
+		bool hadVisibility = false;
+		std::vector<unsigned char> visibility;
 		std::vector<ccColor::Rgba> colors;
 	};
 
