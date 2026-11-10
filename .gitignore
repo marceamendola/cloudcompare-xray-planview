@@ -13,3 +13,5 @@ out/
 *.tmp
 *.pending
 desktop.ini
+__pycache__/
+*.pyc
